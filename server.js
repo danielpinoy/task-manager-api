@@ -1,18 +1,35 @@
+// Keep your existing imports
 const express = require("express");
 const cors = require("cors");
 const pool = require("./config/db");
 const taskRoutes = require("./routes/taskRoutes");
-require("dotenv").config();
+
+// Add new imports for authentication
+const userRoutes = require("./routes/userRoutes");
+const { authenticateToken } = require("./middleware/authMiddleware");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Middleware
-app.use(cors());
+// Your existing middleware
+app.use(
+  cors({
+    origin: process.env.FRONTEND_URL || "http://localhost:3000",
+    credentials: true,
+  })
+);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Test database connection
+// Add security headers
+app.use((req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader("X-XSS-Protection", "1; mode=block");
+  next();
+});
+
+// Keep your existing database connection test
 const testConnection = async () => {
   try {
     const connection = await pool.getConnection();
@@ -25,15 +42,16 @@ const testConnection = async () => {
 
 testConnection();
 
-// Routes
-app.use("/api/tasks", taskRoutes);
+// Update your routes
+app.use("/api/auth", userRoutes); // Add authentication routes
+app.use("/api/tasks", authenticateToken, taskRoutes); // Protect task routes
 
-// Basic route for testing
+// Keep your existing welcome route
 app.get("/", (req, res) => {
   res.json({ message: "Welcome to Task Manager API" });
 });
 
-// Error handling middleware
+// Keep your existing error handling middleware
 app.use((err, req, res, next) => {
   console.error(err.stack);
   res.status(500).json({
@@ -42,7 +60,7 @@ app.use((err, req, res, next) => {
   });
 });
 
-// Start server
+// Keep your existing server startup
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT} 🚀`);
   console.log(`Visit http://localhost:${PORT} to test the API`);

@@ -1,14 +1,13 @@
 # Task Manager API
 
-A RESTful API for managing tasks with support for status tracking, priorities, and task organization.
+A RESTful API for managing tasks with user authentication, status tracking, priorities, and task organization.
 
 ## Features
 
+- User authentication and task management
 - Create, read, update, and delete tasks
 - Filter tasks by status and priority
-- Track task progress (not-started, in-progress, completed)
-- Set task priorities (high, low, minimal)
-- MySQL database integration
+- MySQL database integration with JWT authentication
 
 ## Prerequisites
 
@@ -30,25 +29,37 @@ cd task-manager-api
 
 ```bash
 npm init -y
-npm install express mysql2 cors dotenv
+npm install express mysql2 cors dotenv bcrypt jsonwebtoken
 npm install nodemon --save-dev
 ```
 
-3. Create database using MySQL:
+3. Create database and tables using MySQL:
 
 ```sql
 CREATE DATABASE IF NOT EXISTS task_manager;
 USE task_manager;
 
+-- Create users table
+CREATE TABLE users (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    email VARCHAR(255) UNIQUE NOT NULL,
+    password VARCHAR(255) NOT NULL,
+    name VARCHAR(255),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
+-- Create tasks table with user relationship
 CREATE TABLE tasks (
     id INT AUTO_INCREMENT PRIMARY KEY,
     title VARCHAR(255) NOT NULL,
     description TEXT,
     status ENUM('not-started', 'in-progress', 'completed') DEFAULT 'not-started',
-    date DATE NOT NULL,
     priority ENUM('high', 'low', 'minimal') DEFAULT 'low',
+    user_id INT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id)
 );
 ```
 
@@ -61,6 +72,7 @@ DB_HOST=localhost
 DB_USER=root
 DB_PASSWORD=your_password_here
 DB_NAME=task_manager
+JWT_SECRET=your_jwt_secret_here
 ```
 
 5. Start the server:
@@ -71,24 +83,62 @@ npm run dev
 
 ## API Endpoints
 
+### Authentication
+
+- `POST /api/auth/register`: Register a new user
+- `POST /api/auth/login`: Login and receive a JWT token
+- `GET /api/auth/profile`: Get user profile
+
 ### Tasks
 
-| Method | Endpoint                        | Description           |
-| ------ | ------------------------------- | --------------------- |
-| GET    | `/api/tasks`                    | Get all tasks         |
-| GET    | `/api/tasks/:id`                | Get a single task     |
-| POST   | `/api/tasks`                    | Create a new task     |
-| PUT    | `/api/tasks/:id`                | Update a task         |
-| DELETE | `/api/tasks/:id`                | Delete a task         |
-| GET    | `/api/tasks/status/:status`     | Get tasks by status   |
-| GET    | `/api/tasks/priority/:priority` | Get tasks by priority |
+- `GET /api/tasks`: Get all tasks for the authenticated user
+- `POST /api/tasks`: Create a new task
+- `PUT /api/tasks/:id`: Update a task
+- `DELETE /api/tasks/:id`: Delete a task
 
-### Request/Response Examples
+#### Register User
 
-#### Create Task
+```http
+POST /api/auth/register
+Content-Type: application/json
+
+{
+    "email": "user@example.com",
+    "password": "securepassword",
+    "name": "John Doe"
+}
+```
+
+#### Login User
+
+```http
+POST /api/auth/login
+Content-Type: application/json
+
+{
+    "email": "user@example.com",
+    "password": "securepassword"
+}
+```
+
+Response:
+
+```json
+{
+  "token": "eyJhbGciOiJIUzI1...",
+  "user": {
+    "id": 1,
+    "email": "user@example.com",
+    "name": "John Doe"
+  }
+}
+```
+
+#### Create Task (Authenticated)
 
 ```http
 POST /api/tasks
+Authorization: Bearer <your-token>
 Content-Type: application/json
 
 {
@@ -98,43 +148,6 @@ Content-Type: application/json
 }
 ```
 
-Response:
-
-```json
-{
-  "id": "1",
-  "title": "Organize Digital Files",
-  "description": "Sort and organize files across devices",
-  "status": "not-started",
-  "date": "January 28, 2025",
-  "priority": "low"
-}
-```
-
-#### Update Task
-
-```http
-PUT /api/tasks/1
-Content-Type: application/json
-
-{
-    "status": "in-progress",
-    "priority": "high"
-}
-```
-
-#### Get Tasks by Status
-
-```http
-GET /api/tasks/status/in-progress
-```
-
-#### Get Tasks by Priority
-
-```http
-GET /api/tasks/priority/high
-```
-
 ## Project Structure
 
 ```
@@ -142,42 +155,37 @@ task-manager-api/
 ├── config/
 │   └── db.js
 ├── controllers/
-│   └── taskController.js
+│   ├── taskController.js
+│   └── userController.js
+├── middleware/
+│   └── authMiddleware.js
 ├── routes/
-│   └── taskRoutes.js
+│   ├── taskRoutes.js
+│   └── userRoutes.js
 ├── .env
 ├── server.js
 ├── package.json
 └── README.md
 ```
 
-## Testing with Insomnia
-
-1. Create a new Collection for Task Manager
-2. Import these example requests:
-   - GET All Tasks: `GET http://localhost:5000/api/tasks`
-   - Create Task: `POST http://localhost:5000/api/tasks`
-   - Update Task: `PUT http://localhost:5000/api/tasks/1`
-   - Delete Task: `DELETE http://localhost:5000/api/tasks/1`
-   - Get by Status: `GET http://localhost:5000/api/tasks/status/not-started`
-   - Get by Priority: `GET http://localhost:5000/api/tasks/priority/high`
-
 ## Error Handling
 
 The API includes error handling for:
 
+- Authentication and authorization
 - Database connection issues
 - Invalid request data
 - Resource not found
 - Server errors
 
-## Contributing
+## Security Features
 
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
+- Password hashing with bcrypt
+- JWT-based authentication
+- Protected routes
+- User-specific data access
+- SQL injection protection
+- CORS configuration
 
 ## License
 
