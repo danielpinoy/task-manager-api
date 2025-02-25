@@ -2,13 +2,16 @@
 
 const jwt = require("jsonwebtoken");
 
-// This middleware verifies the JWT token sent in the request header
+// This middleware verifies the JWT token sent in the cookie or the authorization header
 const authenticateToken = (req, res, next) => {
-  // Get the authorization header from the request
-  const authHeader = req.headers["authorization"];
+  // First check for token in cookies (preferred method)
+  let token = req.cookies.accessToken;
 
-  // The token is sent as "Bearer <token>", so we split and get the second part
-  const token = authHeader && authHeader.split(" ")[1];
+  // Fallback to checking Authorization header for backward compatibility
+  if (!token) {
+    const authHeader = req.headers["authorization"];
+    token = authHeader && authHeader.split(" ")[1];
+  }
 
   if (!token) {
     return res.status(401).json({ message: "Authentication token required" });
@@ -24,7 +27,10 @@ const authenticateToken = (req, res, next) => {
     // Continue to the next middleware or route handler
     next();
   } catch (error) {
-    return res.status(403).json({ message: "Invalid or expired token" });
+    if (error.name === "TokenExpiredError") {
+      return res.status(401).json({ message: "Token has expired" });
+    }
+    return res.status(403).json({ message: "Invalid token" });
   }
 };
 

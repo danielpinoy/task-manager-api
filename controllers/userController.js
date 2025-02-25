@@ -44,10 +44,9 @@ const login = async (req, res) => {
 
   try {
     // Debug: Check if JWT_SECRET is available
-    console.log(
-      "JWT_SECRET check:",
-      process.env.JWT_SECRET ? "Present" : "Missing"
-    );
+    if (!process.env.JWT_SECRET) {
+      throw new Error("JWT_SECRET is not configured");
+    }
 
     const [users] = await pool.query("SELECT * FROM users WHERE email = ?", [
       email,
@@ -64,19 +63,38 @@ const login = async (req, res) => {
       return res.status(401).json({ message: "Invalid credentials" });
     }
 
-    // Make sure JWT_SECRET exists before using it
-    if (!process.env.JWT_SECRET) {
-      throw new Error("JWT_SECRET is not configured");
-    }
-
-    const token = jwt.sign(
+    // Create access token (short-lived)
+    const accessToken = jwt.sign(
       { userId: user.id, email: user.email },
       process.env.JWT_SECRET,
-      { expiresIn: "24h" }
+      { expiresIn: "15m" } // 15 minutes
     );
 
+    // Create refresh token (long-lived)
+    const refreshToken = jwt.sign(
+      { userId: user.id },
+      process.env.JWT_SECRET,
+      { expiresIn: "7d" } // 7 days
+    );
+
+    // Set the access token as an HTTP-only cookie
+    res.cookie("accessToken", accessToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production", // HTTPS only in production
+      sameSite: "strict",
+      maxAge: 15 * 60 * 1000, // 15 minutes
+    });
+
+    // Set the refresh token as an HTTP-only cookie
+    res.cookie("refreshToken", refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+      path: "/api/auth/refresh", // Only sent to refresh endpoint
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    });
+
     res.json({
-      token,
       user: {
         id: user.id,
         email: user.email,
@@ -112,8 +130,64 @@ const getProfile = async (req, res) => {
   }
 };
 
+// Refresh access token using refresh token
+const refreshToken = async (req, res) => {
+  const refreshToken = req.cookies.refreshToken;
+
+  if (!refreshToken) {
+    return res.status(401).json({ message: "Refresh token not found" });
+  }
+
+  try {
+    // Verify the refresh token
+    const decoded = jwt.verify(refreshToken, process.env.JWT_SECRET);
+
+    // Get user from database to ensure they still exist
+    const [users] = await pool.query("SELECT * FROM users WHERE id = ?", [
+      decoded.userId,
+    ]);
+
+    if (users.length === 0) {
+      return res.status(401).json({ message: "User no longer exists" });
+    }
+
+    const user = users[0];
+
+    // Generate new access token
+    const accessToken = jwt.sign(
+      { userId: user.id, email: user.email },
+      process.env.JWT_SECRET,
+      { expiresIn: "15m" }
+    );
+
+    // Set the new access token as a cookie
+    res.cookie("accessToken", accessToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+      maxAge: 15 * 60 * 1000, // 15 minutes
+    });
+
+    res.json({ message: "Token refreshed successfully" });
+  } catch (error) {
+    console.error("Token refresh error:", error);
+    res.status(401).json({ message: "Invalid refresh token" });
+  }
+};
+
+// Logout user
+const logout = (req, res) => {
+  // Clear the cookies
+  res.clearCookie("accessToken");
+  res.clearCookie("refreshToken", { path: "/api/auth/refresh" });
+
+  res.json({ message: "Logged out successfully" });
+};
+
 module.exports = {
   register,
   login,
   getProfile,
+  refreshToken,
+  logout,
 };
