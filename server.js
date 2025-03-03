@@ -2,6 +2,7 @@
 const express = require("express");
 const cors = require("cors");
 const pool = require("./config/db");
+const cookieParser = require("cookie-parser");
 const taskRoutes = require("./routes/taskRoutes");
 
 // Add new imports for authentication
@@ -9,6 +10,9 @@ const userRoutes = require("./routes/userRoutes");
 const { authenticateToken } = require("./middleware/authMiddleware");
 
 const app = express();
+
+app.use(cookieParser());
+
 const PORT = process.env.PORT || 5000;
 
 // Your existing middleware

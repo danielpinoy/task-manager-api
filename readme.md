@@ -4,17 +4,19 @@ A RESTful API for managing tasks with user authentication, status tracking, prio
 
 ## Features
 
+- Secure cookie-based authentication system with refresh tokens
 - User authentication and task management
 - Create, read, update, and delete tasks
 - Filter tasks by status and priority
-- MySQL database integration with JWT authentication
+- MySQL database integration
+- Protection against XSS attacks using HTTP-only cookies
 
 ## Prerequisites
 
 - Node.js
 - MySQL Server
 - MySQL Workbench
-- API testing tool (Insomnia)
+- API testing tool (Insomnia or Postman)
 
 ## Installation
 
@@ -29,7 +31,7 @@ cd task-manager-api
 
 ```bash
 npm init -y
-npm install express mysql2 cors dotenv bcrypt jsonwebtoken
+npm install express mysql2 cors dotenv bcrypt jsonwebtoken cookie-parser
 npm install nodemon --save-dev
 ```
 
@@ -86,8 +88,11 @@ npm run dev
 ### Authentication
 
 - `POST /api/auth/register`: Register a new user
-- `POST /api/auth/login`: Login and receive a JWT token
-- `GET /api/auth/profile`: Get user profile
+- `POST /api/auth/login`: Login and receive HTTP-only cookies
+- `GET /api/auth/profile`: Get user profile (protected)
+- `GET /api/auth/me`: Check authentication status (protected)
+- `POST /api/auth/refresh`: Refresh access token using refresh token
+- `POST /api/auth/logout`: Logout and clear authentication cookies
 
 ### Tasks
 
@@ -95,6 +100,8 @@ npm run dev
 - `POST /api/tasks`: Create a new task
 - `PUT /api/tasks/:id`: Update a task
 - `DELETE /api/tasks/:id`: Delete a task
+
+## Authentication Flow Examples
 
 #### Register User
 
@@ -104,7 +111,7 @@ Content-Type: application/json
 
 {
     "email": "user@example.com",
-    "password": "securepassword",
+    "password": "Password123",
     "name": "John Doe"
 }
 ```
@@ -117,7 +124,7 @@ Content-Type: application/json
 
 {
     "email": "user@example.com",
-    "password": "securepassword"
+    "password": "Password123"
 }
 ```
 
@@ -125,7 +132,6 @@ Response:
 
 ```json
 {
-  "token": "eyJhbGciOiJIUzI1...",
   "user": {
     "id": 1,
     "email": "user@example.com",
@@ -134,11 +140,56 @@ Response:
 }
 ```
 
+Note: Authentication tokens are set as HTTP-only cookies and are not included in the response body.
+
+#### Check Authentication Status
+
+```http
+GET /api/auth/me
+```
+
+Response:
+
+```json
+{
+  "isAuthenticated": true,
+  "userId": 1,
+  "email": "user@example.com"
+}
+```
+
+#### Refresh Access Token
+
+```http
+POST /api/auth/refresh
+```
+
+Response:
+
+```json
+{
+  "message": "Token refreshed successfully"
+}
+```
+
+#### Logout
+
+```http
+POST /api/auth/logout
+```
+
+Response:
+
+```json
+{
+  "message": "Logged out successfully"
+}
+```
+
 #### Create Task (Authenticated)
 
 ```http
 POST /api/tasks
-Authorization: Bearer <your-token>
 Content-Type: application/json
 
 {
@@ -168,11 +219,61 @@ task-manager-api/
 └── README.md
 ```
 
+## Authentication System
+
+The application uses a two-token authentication system:
+
+1. **Access Token**
+
+   - Short-lived (15 minutes)
+   - Stored as HTTP-only cookie
+   - Used for accessing protected resources
+
+2. **Refresh Token**
+   - Long-lived (7 days)
+   - Stored as HTTP-only cookie
+   - Used only to obtain new access tokens when they expire
+
+Benefits of this approach:
+
+- Protection against XSS attacks (JavaScript cannot access HTTP-only cookies)
+- Improved user experience (silent token refresh)
+- Better security (short-lived access tokens)
+- No token storage needed in local/session storage
+
+## Frontend Integration
+
+To use this API with a frontend application:
+
+1. Configure your HTTP client to include credentials:
+
+```javascript
+// Using axios
+axios.defaults.withCredentials = true;
+
+// Using fetch
+fetch(url, {
+  credentials: "include",
+});
+```
+
+2. Set up CORS on the server to allow your frontend domain and credentials:
+
+```javascript
+app.use(
+  cors({
+    origin: "http://yourdomain.com",
+    credentials: true,
+  })
+);
+```
+
 ## Error Handling
 
 The API includes error handling for:
 
 - Authentication and authorization
+- Token expiration and refresh
 - Database connection issues
 - Invalid request data
 - Resource not found
@@ -181,12 +282,11 @@ The API includes error handling for:
 ## Security Features
 
 - Password hashing with bcrypt
-- JWT-based authentication
+- HTTP-only cookie-based authentication
+- Two-token system with automatic refresh
 - Protected routes
 - User-specific data access
 - SQL injection protection
-- CORS configuration
+- CORS configuration with credentials support
 
 ## License
-
-This project is licensed under the MIT License - see the LICENSE file for details
